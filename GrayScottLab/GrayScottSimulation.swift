@@ -72,50 +72,36 @@ class GrayScottSimulation {
     }
 
     func perform(stepCount: Int, timestep dt: Float) -> MTLTexture? {
-        assert(textures.count >= 2)
-
         var resultTexture: MTLTexture?
-        for step in 0..<stepCount {
-            textureSemaphore.wait()
-            
-            guard let commandBuffer = context.commandQueue.makeCommandBuffer() else { return resultTexture }
-
+        guard let commandBuffer = context.commandQueue.makeCommandBuffer() else { return resultTexture }
+        let commandEncoder = commandBuffer.makeComputeCommandEncoder()!
+        for _ in 0..<stepCount {
             let sourceTexture = textures[sourceTextureIndex]
             let destTexture = textures[(sourceTextureIndex + 1) % textures.count]
-            encodeSingleStep(commandBuffer, sourceTexture: sourceTexture, destTexture: destTexture, timestep: dt)
-
-            commandBuffer.addCompletedHandler { _ in
-                self.textureSemaphore.signal()
-            }
-            
+            encodeSingleStep(commandEncoder, sourceTexture: sourceTexture, destTexture: destTexture, timestep: dt)
             sourceTextureIndex = (sourceTextureIndex + 1) % textures.count
-            commandBuffer.commit()
-
-            if step == (stepCount - 1) {
-                resultTexture = destTexture
-                commandBuffer.waitUntilCompleted()
-            }
+            resultTexture = destTexture
         }
-
+        commandEncoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
         return resultTexture
     }
 
-    private func encodeSingleStep(_ commandBuffer: MTLCommandBuffer,
+    private func encodeSingleStep(_ commandEncoder: MTLComputeCommandEncoder,
                                   sourceTexture: MTLTexture,
                                   destTexture: MTLTexture,
                                   timestep: Float)
     {
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
-
         let computePipeline = context.computePipeline(at: simulationPipelineIndex)!
-        encoder.setComputePipelineState(computePipeline)
+        commandEncoder.setComputePipelineState(computePipeline)
 
         var stepParams = params
-        encoder.setBytes(&stepParams, length: MemoryLayout.size(ofValue: stepParams), index: 0)
+        commandEncoder.setBytes(&stepParams, length: MemoryLayout.size(ofValue: stepParams), index: 0)
         var dT = timestep
-        encoder.setBytes(&dT, length: MemoryLayout.size(ofValue: dT), index: 1)
+        commandEncoder.setBytes(&dT, length: MemoryLayout.size(ofValue: dT), index: 1)
 
-        encoder.setTextures([sourceTexture, destTexture], range: 0..<2)
+        commandEncoder.setTextures([sourceTexture, destTexture], range: 0..<2)
 
         let gridSize = gridDimensions
         let threadgroupSize = MTLSize(width: 8, height: 8, depth: 1)
@@ -123,7 +109,6 @@ class GrayScottSimulation {
                                           height: (gridSize.height + threadgroupSize.height - 1) / threadgroupSize.height,
                                           depth: 1)
 
-        encoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadgroupSize)
-        encoder.endEncoding()
+        commandEncoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadgroupSize)
     }
 }
