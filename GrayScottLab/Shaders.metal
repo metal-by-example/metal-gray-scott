@@ -8,8 +8,8 @@ struct GrayScottParams {
     float Dv;
 };
 
-static float hash(float2 uv) {
-    return fract(sin(dot(uv, float2(12.9898f, 4.1414f))) * 43758.5453f);
+static float hash(float2 coords) {
+    return fract(sin(dot(coords, float2(12.9898f, 4.1414f))) * 43758.5453f);
 }
 
 // Based on Morgan McGuire @morgan3d
@@ -46,8 +46,7 @@ static float2 laplacian(texture2d<float, access::read> image, int2 coords) {
     return L;
 }
 
-static float2 simulate(float2 previous, float2 laplacian, constant GrayScottParams &params, float dT)
-{
+static float2 simulate(float2 previous, float2 laplacian, constant GrayScottParams &params, float dT) {
     float u = previous.r;
     float v = previous.g;
     float uvv = u * v * v;
@@ -100,6 +99,7 @@ void seed(texture2d<float, access::write> destTexture [[texture(0)]],
     }
     float2 coords = float2(x, y);
 
+    // Set up initial conditions similar to Pearson 1993
     // "Initially, the entire system was placed in the trivial state (U = 1, V = 0)."
     float2 UV = { 1.0f, 0.0f };
 
@@ -113,7 +113,7 @@ void seed(texture2d<float, access::write> destTexture [[texture(0)]],
 
     // "These conditions were then perturbed with ±1% random noise
     // in order to break the square symmetry."
-    UV += 0.01 * (float2(noise(coords + seed), noise(coords + (seed * 3) + float2(31, 17))) * 2.0 - 1.0);
+    UV += 0.01 * (float2(noise(coords + (seed * 31)), noise(coords + (seed * 17))) * 2.0 - 1.0);
     UV = saturate(UV);
 
     destTexture.write(UV.rggg, threadIndex);
@@ -137,6 +137,7 @@ VertexOut vertex_main(VertexIn in [[stage_in]]) {
     return out;
 }
 
+// Calculate a scalar value from a two-channel reaction-diffusion state texture
 static float P(texture2d<float, access::sample> image, float2 coords) {
     constexpr sampler bilinearSampler(coord::normalized, filter::linear, mip_filter::none);
     float2 values = image.sample(bilinearSampler, coords).rg;
@@ -144,7 +145,13 @@ static float P(texture2d<float, access::sample> image, float2 coords) {
     return value;
 }
 
-static float3 gradient(float v) {
+static float remap(float sourceMin, float sourceMax, float destMin, float destMax, float t) {
+    float f = (t - sourceMin) / (sourceMax - sourceMin);
+    return mix(destMin, destMax, f);
+}
+
+static float3 colormap(float v) {
+    // Four-stop linear color gradient (white, white, blue, black)
     float3 stop0 = float3(1.0f, 1.0f, 1.0f);
     float3 stop1 = float3(1.0f, 1.0f, 1.0f);
     float3 stop2 = float3(0.0f, 0.204f, 0.780f);
@@ -162,25 +169,30 @@ float4 fragment_main(VertexOut in [[stage_in]],
 {
     // texel width in texture coordinate space
     float3 dp = float3(1.0f / float2(image.get_width(), image.get_height()), 0.0f);
-    float2 uv = in.texCoords;
 
-    float value = P(image, in.texCoords);
+    float2 coords = in.texCoords;
+
+    float value = P(image, coords);
+    // Approximate gradient via central differences
     float3 N {
-        P(image, uv + dp.xz) - P(image, uv - dp.xz),
-        P(image, uv - dp.zy) - P(image, uv + dp.zy),
+        P(image, coords + dp.xz) - P(image, coords - dp.xz),
+        P(image, coords - dp.zy) - P(image, coords + dp.zy),
         abs(cos(value * M_PI_F)) * 0.5f
     };
     N = normalize(N);
 
+    // Cheesy Blinn-Phong lighting
     float3 L = normalize(float3(0.9f, 0.9f, 1.0f));
-    float3 V = float3(0, 0, 1);
+    float3 V = float3(0.0f, 0.0f, 1.0f);
     float3 H = normalize(L + V);
     float NdotL = saturate(saturate(dot(N, L)));
     float NdotH = saturate(saturate(dot(N, H)));
-    float diffuse = saturate(NdotL) * 0.5 + 0.5;
+    float diffuse = saturate(NdotL) * 0.5f + 0.5f;
     float specular = powr(NdotH, 50.0f) * step(0.0f, NdotL);
 
-    float3 baseColor = gradient(value + 0.1f);
+    // Map value to color and calculate final lighting
+    float3 baseColor = colormap(remap(0.0f, 0.9f, 0.0f, 1.0f, value));
     float3 color = diffuse * baseColor + float3(specular * 0.25f);
+
     return float4(color.rgb, 1.0f);
 }

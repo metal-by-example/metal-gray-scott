@@ -1,24 +1,19 @@
-
-import Foundation
 import Metal
 
 class Renderer {
     let context: GPUContext
-    var viewportSize = CGSize.zero
-
     var simulationTexture: MTLTexture?
+    private let vertexDescriptor = MTLVertexDescriptor()
+    private var renderPipelineIndex: Int = -1
+    private var vertexBuffer: MTLBuffer?
 
-    var vertexDescriptor = MTLVertexDescriptor()
-    var renderPipelineIndex: Int = -1
-    var vertexBuffer: MTLBuffer!
-
-    init(context: GPUContext) {
+    init(context: GPUContext, simulationSize: MTLSize) {
         self.context = context
-        makeResources()
+        makeResources(simulationSize)
         makePipelines()
     }
 
-    func makeResources() {
+    private func makeResources(_ simulationSize: MTLSize) {
         let vertexData: [Float] = [
         //    x     y    z    u    v
             -1.0,  1.0, 0.0, 0.0, 0.0, // upper left
@@ -39,17 +34,38 @@ class Renderer {
 
         vertexBuffer = context.device.makeBuffer(bytes: vertexData,
                                                  length: MemoryLayout<Float>.stride * vertexData.count,
-                                                 options: [.storageModeShared])!
+                                                 options: [.storageModeShared])
+
+        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg32Float,
+                                                                         width: simulationSize.width,
+                                                                         height: simulationSize.height,
+                                                                         mipmapped: false)
+        textureDescriptor.storageMode = .private
+        textureDescriptor.usage = .shaderRead
+        simulationTexture = context.device.makeTexture(descriptor: textureDescriptor)
     }
 
-    func makePipelines() {
-        renderPipelineIndex = context.cacheRenderPipeline(vertexFunction: "vertex_main",
-                                                          fragmentFunction: "fragment_main",
-                                                          vertexDescriptor: vertexDescriptor)!
+    private func makePipelines() {
+        do {
+            renderPipelineIndex = try context.cacheRenderPipeline(vertexFunction: "vertex_main",
+                                                                  fragmentFunction: "fragment_main",
+                                                                  vertexDescriptor: vertexDescriptor)
+        } catch {
+            fatalError("Error occurred during render pipeline creation: \(error)")
+        }
+    }
+
+    func copySimulationResults(from texture: MTLTexture) {
+        guard let commandBuffer = context.commandQueue.makeCommandBuffer() else { return }
+        if let blitEncoder = commandBuffer.makeBlitCommandEncoder(), let destTexture = simulationTexture {
+            blitEncoder.copy(from: texture, to: destTexture)
+            blitEncoder.endEncoding()
+        }
+        commandBuffer.commit()
     }
 
     func draw(_ renderCommandEncoder: MTLRenderCommandEncoder) {
-        let renderPipelineState = context.renderPipeline(at: renderPipelineIndex)!
+        let renderPipelineState = context.renderPipeline(at: renderPipelineIndex)
         guard let texture = simulationTexture else { return }
         renderCommandEncoder.setFrontFacing(.counterClockwise)
         renderCommandEncoder.setCullMode(.back)
