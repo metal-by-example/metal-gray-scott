@@ -13,7 +13,7 @@ class ViewController: NSViewController, MTKViewDelegate {
     // http://www.mrob.com/pub/comp/xmorphia/pearson-classes.html
     let presets = [
         GrayScottPreset(title: "Custom", F: 0, k: 0),
-        GrayScottPreset(title: "α", F: 0.014, k: 0.053),
+        GrayScottPreset(title: "α", F: 0.014, k: 0.049),
         GrayScottPreset(title: "β", F: 0.026, k: 0.052),
         GrayScottPreset(title: "γ", F: 0.026, k: 0.055),
         GrayScottPreset(title: "δ", F: 0.042, k: 0.059),
@@ -45,7 +45,7 @@ class ViewController: NSViewController, MTKViewDelegate {
     private let numberFormatter = NumberFormatter()
 
     required init?(coder: NSCoder) {
-        numberFormatter.maximumFractionDigits = 3
+        numberFormatter.maximumFractionDigits = 4
         simulation = GrayScottSimulation(context: context, gridDimensions: simulationSize)
         renderer = Renderer(context: context, simulationSize: simulationSize)
         super.init(coder: coder)
@@ -119,8 +119,8 @@ class ViewController: NSViewController, MTKViewDelegate {
         var params = simulation.params
         params.F = fSlider.floatValue
         params.K = kSlider.floatValue
-        fLabel.stringValue = numberFormatter.string(from: NSNumber(value: simulation.params.F)) ?? "--"
-        kLabel.stringValue = numberFormatter.string(from: NSNumber(value: simulation.params.K)) ?? "--"
+        fLabel.stringValue = numberFormatter.string(from: NSNumber(value: params.F)) ?? "--"
+        kLabel.stringValue = numberFormatter.string(from: NSNumber(value: params.K)) ?? "--"
         simulation.params = params
     }
 

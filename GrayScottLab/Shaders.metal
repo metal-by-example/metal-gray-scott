@@ -18,23 +18,23 @@ static float noise(float2 x) {
     float2 i = floor(x);
     float2 f = fract(x);
     float a = hash(i);
-    float b = hash(i + float2(1.0, 0.0));
-    float c = hash(i + float2(0.0, 1.0));
-    float d = hash(i + float2(1.0, 1.0));
-    float2 u = f * f * (3.0 - 2.0 * f);
-    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+    float b = hash(i + float2(1.0f, 0.0f));
+    float c = hash(i + float2(0.0f, 1.0f));
+    float d = hash(i + float2(1.0f, 1.0f));
+    float2 u = f * f * (3.0f - 2.0f * f);
+    return mix(a, b, u.x) + (c - a) * u.y * (1.0f - u.x) + (d - b) * u.x * u.y;
 }
 
 static float2 laplacian(texture2d<float, access::read> image, int2 coords) {
     const float3x3 kern {{
-        { 0.05,  0.20, 0.05 },
-        { 0.20, -1.00, 0.20 },
-        { 0.05,  0.20, 0.05 },
+        { 0.0f,  1.0f, 0.0f },
+        { 1.0f, -4.0f, 1.0f },
+        { 0.0f,  1.0f, 0.0f },
     }};
     int W = image.get_width();
     int H = image.get_height();
 
-    float2 L { 0.0, 0.0 };
+    float2 L { 0.0f, 0.0f };
     for (int i = -1; i <= 1; ++i) {
         for (int j = -1; j <= 1; ++j) {
             float coeff = kern[j + 1][i + 1];
@@ -57,7 +57,7 @@ static float2 simulate(float2 previous, float2 laplacian, constant GrayScottPara
     float Lu = laplacian.r;
     float Lv = laplacian.g;
     float2 reaction {
-        -uvv + F * (1.0 - u),
+        -uvv + F * (1.0f - u),
         uvv - (F + K) * v,
     };
     float2 diffusion {
@@ -108,12 +108,13 @@ void seed(texture2d<float, access::write> destTexture [[texture(0)]],
     int2 centerMax { (int)(simSize.x / 2) + 10, (int)(simSize.y / 2) + 10 };
     if (x >= centerMin.x && x <= centerMax.x && y >= centerMin.y && y <= centerMax.y) {
         // "...was then perturbed to (U = 1/2, V = 1/4)."
-        UV = float2(0.5, 0.25);
+        UV = float2(0.5f, 0.25f);
     }
 
     // "These conditions were then perturbed with ±1% random noise
     // in order to break the square symmetry."
-    UV += 0.01 * (float2(noise(coords + (seed * 31)), noise(coords + (seed * 17))) * 2.0 - 1.0);
+    float2 b = float2(seed * 31.0f, seed * 17.0f);
+    UV += 0.01f * (float2(noise(coords + b * 3.0f), noise(coords + b * 5.0f)) * 2.0f - 1.0f);
     UV = saturate(UV);
 
     destTexture.write(UV.rggg, threadIndex);

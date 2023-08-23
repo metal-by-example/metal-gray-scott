@@ -6,8 +6,8 @@ class GrayScottSimulation {
     struct Params {
         var F: Float = 0.022
         var K: Float = 0.051
-        let Du: Float = 2e-1
-        let Dv: Float = 1e-1
+        let Du: Float = 1e-1
+        let Dv: Float = 5e-2
     }
 
     let context: GPUContext
