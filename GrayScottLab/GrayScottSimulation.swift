@@ -18,7 +18,6 @@ class GrayScottSimulation {
     private let seedPipelineIndex: Int
 
     let textureCount = 2
-    private let textureSemaphore: DispatchSemaphore
     private var textures = [MTLTexture]()
     private var sourceTextureIndex = 0
 
@@ -32,8 +31,6 @@ class GrayScottSimulation {
         } catch {
             fatalError("Error occurred when creating compute pipeline states: \(error)")
         }
-
-        textureSemaphore = DispatchSemaphore(value: textureCount)
 
         for _ in 0..<textureCount {
             let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg32Float,
